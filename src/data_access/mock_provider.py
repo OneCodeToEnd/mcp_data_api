@@ -172,13 +172,14 @@ class MockDataProvider(DataProvider):
         }
 
     async def validate_app_id(self, app_id: str) -> bool:
-        """Validate if app_id exists"""
-        return app_id in self._mock_data
+        """Validate if app_id exists (for dev, always return True)"""
+        return True
 
     async def get_categories(self, app_id: str) -> List[Category]:
         """Get all categories for an app"""
         if app_id not in self._mock_data:
-            raise InvalidAppIdError(app_id)
+            # Use demo_app data for unknown app_id
+            return self._mock_data["demo_app"]["categories"]
         return self._mock_data[app_id]["categories"]
 
     async def get_apis_by_category(
@@ -186,12 +187,14 @@ class MockDataProvider(DataProvider):
     ) -> List[APIBasic]:
         """Get all APIs in a category"""
         if app_id not in self._mock_data:
-            raise InvalidAppIdError(app_id)
+            app_data = self._mock_data["demo_app"]
+        else:
+            app_data = self._mock_data[app_id]
 
-        if category_id not in self._mock_data[app_id]["apis"]:
+        if category_id not in app_data["apis"]:
             raise CategoryNotFoundError(category_id)
 
-        apis = self._mock_data[app_id]["apis"][category_id]
+        apis = app_data["apis"][category_id]
         return [
             APIBasic(
                 name=api.name,
@@ -206,10 +209,12 @@ class MockDataProvider(DataProvider):
     ) -> List[APIDetail]:
         """Get detailed information for specific APIs"""
         if app_id not in self._mock_data:
-            raise InvalidAppIdError(app_id)
+            app_data = self._mock_data["demo_app"]
+        else:
+            app_data = self._mock_data[app_id]
 
         results = []
-        for category_apis in self._mock_data[app_id]["apis"].values():
+        for category_apis in app_data["apis"].values():
             for api in category_apis:
                 if api.name in api_names:
                     results.append(api)

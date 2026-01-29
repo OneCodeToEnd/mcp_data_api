@@ -3,11 +3,16 @@ from fastmcp import FastMCP, Context
 from typing import List
 import logging
 import json
+import contextvars
+from urllib.parse import urlparse, parse_qs
 from .config import Settings
 from .data_access import MockDataProvider
 from .cache import MemoryCache
 from .services import SessionService, CategoryService, APIService, ExecutionService
 from .models import SessionContext, ExecutionRequest
+
+# Context variable to store app_id for current request
+current_app_id = contextvars.ContextVar("current_app_id", default=None)
 
 # Initialize settings
 settings = Settings.from_yaml()
@@ -46,19 +51,48 @@ execution_service = ExecutionService(data_provider)
 logger.info("All services initialized successfully")
 
 
-def get_session_context(ctx: Context, require_init: bool = True) -> SessionContext:
+def get_app_id_from_request() -> str:
+    """
+    Extract app_id from HTTP request headers using get_http_headers().
+
+    Supports headers:
+    - X-App-Id (case-insensitive)
+    - App-Id (case-insensitive)
+    """
+    try:
+        from fastmcp.server.dependencies import get_http_headers
+
+        headers = get_http_headers()
+        if headers:
+            # Try common header names for app_id
+            app_id = (
+                headers.get("x-app-id") or
+                headers.get("X-App-Id") or
+                headers.get("app-id") or
+                headers.get("App-Id")
+            )
+            if app_id:
+                logger.info(f"✓ app_id extracted from HTTP header: {app_id}")
+                return app_id
+    except Exception as e:
+        logger.debug(f"Could not extract app_id from headers: {e}")
+
+    # Fallback to configured default
+    logger.info(f"Using default app_id from config: {settings.server.app_id}")
+    return settings.server.app_id
+
+
+def get_session_context(ctx: Context) -> SessionContext:
     """
     Get session context from FastMCP context.
 
+    Auto-initializes from HTTP header X-App-Id if not already set.
+
     Args:
         ctx: FastMCP context
-        require_init: If True, require session to be initialized and raise error if not
 
     Returns:
         Session context
-
-    Raises:
-        SessionNotInitializedError: If require_init is True and session is not initialized
     """
     logger.debug("-" * 60)
     logger.debug("CONTEXT RETRIEVAL: Getting session context")
@@ -69,67 +103,25 @@ def get_session_context(ctx: Context, require_init: bool = True) -> SessionConte
     if session_ctx is not None:
         logger.info(f"✓ Session context found - app_id: {session_ctx.app_id}, initialized: {session_ctx.initialized}")
         logger.debug(f"  Session details: {session_ctx.model_dump()}")
-
-        # Check if initialized if required
-        if require_init and not session_ctx.is_initialized():
-            logger.warning("✗ Session exists but not initialized")
-            from .utils.errors import SessionNotInitializedError
-            raise SessionNotInitializedError()
-
         return session_ctx
 
-    # No existing session context
-    logger.info("✗ No existing session context found")
+    # No existing session context - auto-initialize from request headers
+    logger.info("✗ No existing session context found, auto-initializing from HTTP header...")
 
-    if require_init:
-        logger.warning("✗ Session not initialized - client must call initialize_session first")
-        from .utils.errors import SessionNotInitializedError
-        raise SessionNotInitializedError()
+    # Extract app_id from request headers
+    app_id = get_app_id_from_request()
 
-    # Return uninitialized context (for initialize_session tool)
-    logger.debug("  Returning uninitialized context for initialization")
+    # Create and store initialized session context
+    session_ctx = SessionContext(
+        app_id=app_id,
+        initialized=True
+    )
+    ctx.set_state("session_context", session_ctx)
+
+    logger.info(f"✓ Session auto-initialized with app_id: {app_id}")
+    logger.debug(f"  Session details: {session_ctx.model_dump()}")
     logger.debug("-" * 60)
-    return SessionContext()
-
-
-@mcp.tool()
-async def initialize_session(app_id: str, ctx: Context) -> dict:
-    """
-    Initialize MCP session with application ID.
-
-    This MUST be called before using any other tools. The session will be
-    associated with the provided app_id for all subsequent API calls.
-
-    Args:
-        app_id: Application identifier (e.g., "3333" or your client identifier)
-
-    Returns:
-        Initialization result with success status and app_id
-    """
-    logger.info("=" * 80)
-    logger.info("MCP TOOL CALL: initialize_session")
-    logger.info("=" * 80)
-    logger.info("Description: Initialize MCP session with application ID")
-    logger.info(f"Parameters:")
-    logger.info(f"  - app_id: {app_id}")
-
-    from .tools import initialize_session_tool as init_tool
-
-    # Get uninitialized session context
-    session_ctx = get_session_context(ctx, require_init=False)
-
-    logger.info("Executing initialization...")
-    result = await init_tool(session_ctx, session_service, app_id)
-
-    # Store initialized context in state
-    updated_ctx = SessionContext(app_id=app_id, initialized=True)
-    ctx.set_state("session_context", updated_ctx)
-
-    logger.info(f"✓ Session initialized successfully with app_id: {app_id}")
-    logger.info(f"  Result: {result.model_dump()}")
-    logger.info("=" * 80)
-
-    return result.model_dump()
+    return session_ctx
 
 
 @mcp.tool()
@@ -278,17 +270,16 @@ async def execute_apis(executions: List[dict], ctx: Context) -> dict:
         if not res.success:
             logger.warning(f"        Error: {res.error}")
         else:
-            logger.debug(f"        Response: {json.dumps(res.response, indent=10)}")
+            logger.debug(f"        Response: {json.dumps(res.data, indent=10)}")
     logger.info("=" * 80)
 
     return result.model_dump()
 
 
 if __name__ == "__main__":
-    # Run the MCP server
     logger.info("=" * 80)
     logger.info("Starting MCP Data API Server")
-    logger.info(f"  Transport: sse")
+    logger.info(f"  Transport: SSE")
     logger.info(f"  Host: {settings.server.host}")
     logger.info(f"  Port: {settings.server.port}")
     logger.info(f"  Path: {settings.server.mcp_path}")
