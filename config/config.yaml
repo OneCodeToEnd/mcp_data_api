@@ -1,0 +1,17 @@
+server:
+  host: "127.0.0.1"
+  port: 32001
+  mcp_path: "/data/api/mcp"
+
+cache:
+  enabled: true
+  ttl: 3600
+  type: "memory"
+
+backend:
+  base_url: "https://api.example.com"
+  api_key: ""  # Set via environment variable API_KEY
+  timeout: 30
+
+logging:
+  level: "INFO"
