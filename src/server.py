@@ -46,31 +46,90 @@ execution_service = ExecutionService(data_provider)
 logger.info("All services initialized successfully")
 
 
-def get_session_context(ctx: Context) -> SessionContext:
-    """Get or create session context from FastMCP context with auto-initialization"""
+def get_session_context(ctx: Context, require_init: bool = True) -> SessionContext:
+    """
+    Get session context from FastMCP context.
+
+    Args:
+        ctx: FastMCP context
+        require_init: If True, require session to be initialized and raise error if not
+
+    Returns:
+        Session context
+
+    Raises:
+        SessionNotInitializedError: If require_init is True and session is not initialized
+    """
     logger.debug("-" * 60)
     logger.debug("CONTEXT RETRIEVAL: Getting session context")
 
-    try:
-        session_ctx = ctx.request_context.session["session_context"]
+    # Use FastMCP's state management (set_state/get_state)
+    session_ctx = ctx.get_state("session_context")
+
+    if session_ctx is not None:
         logger.info(f"✓ Session context found - app_id: {session_ctx.app_id}, initialized: {session_ctx.initialized}")
         logger.debug(f"  Session details: {session_ctx.model_dump()}")
-        return session_ctx
-    except (KeyError, TypeError) as e:
-        logger.info("✗ No existing session context found, auto-initializing...")
-        logger.debug(f"  Reason: {type(e).__name__}")
 
-        # Auto-initialize session with configured app_id
-        session_ctx = SessionContext(
-            app_id=settings.server.app_id,
-            initialized=True
-        )
-        ctx.request_context.session["session_context"] = session_ctx
+        # Check if initialized if required
+        if require_init and not session_ctx.is_initialized():
+            logger.warning("✗ Session exists but not initialized")
+            from .utils.errors import SessionNotInitializedError
+            raise SessionNotInitializedError()
 
-        logger.info(f"✓ Session auto-initialized with app_id: {session_ctx.app_id}")
-        logger.debug(f"  New session details: {session_ctx.model_dump()}")
-        logger.debug("-" * 60)
         return session_ctx
+
+    # No existing session context
+    logger.info("✗ No existing session context found")
+
+    if require_init:
+        logger.warning("✗ Session not initialized - client must call initialize_session first")
+        from .utils.errors import SessionNotInitializedError
+        raise SessionNotInitializedError()
+
+    # Return uninitialized context (for initialize_session tool)
+    logger.debug("  Returning uninitialized context for initialization")
+    logger.debug("-" * 60)
+    return SessionContext()
+
+
+@mcp.tool()
+async def initialize_session(app_id: str, ctx: Context) -> dict:
+    """
+    Initialize MCP session with application ID.
+
+    This MUST be called before using any other tools. The session will be
+    associated with the provided app_id for all subsequent API calls.
+
+    Args:
+        app_id: Application identifier (e.g., "3333" or your client identifier)
+
+    Returns:
+        Initialization result with success status and app_id
+    """
+    logger.info("=" * 80)
+    logger.info("MCP TOOL CALL: initialize_session")
+    logger.info("=" * 80)
+    logger.info("Description: Initialize MCP session with application ID")
+    logger.info(f"Parameters:")
+    logger.info(f"  - app_id: {app_id}")
+
+    from .tools import initialize_session_tool as init_tool
+
+    # Get uninitialized session context
+    session_ctx = get_session_context(ctx, require_init=False)
+
+    logger.info("Executing initialization...")
+    result = await init_tool(session_ctx, session_service, app_id)
+
+    # Store initialized context in state
+    updated_ctx = SessionContext(app_id=app_id, initialized=True)
+    ctx.set_state("session_context", updated_ctx)
+
+    logger.info(f"✓ Session initialized successfully with app_id: {app_id}")
+    logger.info(f"  Result: {result.model_dump()}")
+    logger.info("=" * 80)
+
+    return result.model_dump()
 
 
 @mcp.tool()

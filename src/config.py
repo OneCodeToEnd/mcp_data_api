@@ -3,6 +3,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Literal
 import yaml
 from pathlib import Path
+import os
 
 
 class ServerSettings(BaseSettings):
@@ -12,7 +13,11 @@ class ServerSettings(BaseSettings):
     mcp_path: str = "/data/api/mcp"
     app_id: str = "test_app"  # Default app_id
 
-    model_config = SettingsConfigDict(env_prefix="SERVER_")
+    model_config = SettingsConfigDict(
+        env_prefix="SERVER_",
+        env_nested_delimiter="__",
+        case_sensitive=False
+    )
 
 
 class CacheSettings(BaseSettings):
@@ -51,16 +56,29 @@ class Settings(BaseSettings):
 
     @classmethod
     def from_yaml(cls, yaml_path: str = "config/config.yaml") -> "Settings":
-        """Load settings from YAML file"""
+        """Load settings from YAML file, then apply environment variables"""
         config_file = Path(yaml_path)
+        config_data = {}
+        
         if config_file.exists():
             with open(config_file, "r") as f:
-                config_data = yaml.safe_load(f)
+                config_data = yaml.safe_load(f) or {}
 
-            return cls(
-                server=ServerSettings(**config_data.get("server", {})),
-                cache=CacheSettings(**config_data.get("cache", {})),
-                backend=BackendSettings(**config_data.get("backend", {})),
-                logging=LoggingSettings(**config_data.get("logging", {}))
-            )
+        # Create settings - Pydantic will automatically apply env vars
+        # because Settings extends BaseSettings with env_file support
+        server_config = config_data.get("server", {})
+        cache_config = config_data.get("cache", {})
+        backend_config = config_data.get("backend", {})
+        logging_config = config_data.get("logging", {})
+
+        return cls(
+            server=ServerSettings(**server_config),
+            cache=CacheSettings(**cache_config),
+            backend=BackendSettings(**backend_config),
+            logging=LoggingSettings(**logging_config)
+        )
+
+    @classmethod
+    def from_env(cls) -> "Settings":
+        """Load settings entirely from environment variables (no YAML)"""
         return cls()
