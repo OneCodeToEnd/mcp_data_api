@@ -10,6 +10,9 @@ class ServerSettings(BaseSettings):
     host: str = "127.0.0.1"
     port: int = 32001
     mcp_path: str = "/data/api/mcp"
+    app_id: str = "test_app"  # Default app_id
+
+    model_config = SettingsConfigDict(env_prefix="SERVER_")
 
 
 class CacheSettings(BaseSettings):

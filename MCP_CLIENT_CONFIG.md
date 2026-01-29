@@ -15,11 +15,16 @@ Add this to your Claude Desktop MCP settings file:
   "mcpServers": {
     "api-data-server": {
       "url": "http://127.0.0.1:32001/data/api/mcp",
-      "transport": "sse"
+      "transport": "sse",
+      "env": {
+        "SERVER_APP_ID": "test_app"
+      }
     }
   }
 }
 ```
+
+**Note**: The `SERVER_APP_ID` environment variable sets the app_id for the session. If not specified, defaults to "test_app".
 
 **Prerequisites**: Server must be running first
 ```bash
@@ -37,14 +42,17 @@ python -m src.server
       "args": ["-m", "src.server"],
       "cwd": "/Users/xiedi/data/rh/code/mcp_data_api",
       "env": {
-        "PYTHONPATH": "/Users/xiedi/data/rh/code/mcp_data_api"
+        "PYTHONPATH": "/Users/xiedi/data/rh/code/mcp_data_api",
+        "SERVER_APP_ID": "test_app"
       }
     }
   }
 }
 ```
 
-**Note**: For stdio transport, you need to modify `src/server.py` to use stdio instead of SSE:
+**Note**:
+- The `SERVER_APP_ID` environment variable sets the app_id for the session
+- For stdio transport, you need to modify `src/server.py` to use stdio instead of SSE:
 
 ```python
 if __name__ == "__main__":
@@ -92,26 +100,28 @@ mcp-inspector http://127.0.0.1:32001/data/api/mcp
 
 ## Available Tools After Connection
 
-Once connected, you'll have access to these 5 tools:
+Once connected, you'll have access to these 4 tools:
 
-1. **initialize_session** - Initialize with app_id
-2. **get_categories** - Browse API categories
-3. **get_apis_by_category** - List APIs in a category
-4. **get_api_details** - Get API details (batch)
-5. **execute_apis** - Execute multiple APIs
+1. **get_categories** - Browse API categories
+2. **get_apis_by_category** - List APIs in a category
+3. **get_api_details** - Get API details (batch)
+4. **execute_apis** - Execute multiple APIs
+
+**Note**: The app_id is automatically initialized from the `SERVER_APP_ID` environment variable configured in your MCP client settings.
 
 ## Example Usage Flow
 
 ```
-1. initialize_session(app_id="test_app")
-2. get_categories()
-3. get_apis_by_category(category_id="user_management")
-4. get_api_details(api_names=["get_user_info"])
-5. execute_apis(executions=[{
+1. get_categories()
+2. get_apis_by_category(category_id="user_management")
+3. get_api_details(api_names=["get_user_info"])
+4. execute_apis(executions=[{
      api_name: "get_user_info",
      parameters: {user_id: "12345"}
    }])
 ```
+
+**Note**: No need to call initialize_session - the session is automatically initialized with the app_id from your MCP client configuration.
 
 ## Troubleshooting
 

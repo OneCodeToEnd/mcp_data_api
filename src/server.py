@@ -25,28 +25,17 @@ execution_service = ExecutionService(data_provider)
 
 
 def get_session_context(ctx: Context) -> SessionContext:
-    """Get or create session context from FastMCP context"""
-    if "session_context" not in ctx.request_context.session:
-        ctx.request_context.session["session_context"] = SessionContext()
-    return ctx.request_context.session["session_context"]
-
-
-@mcp.tool()
-async def initialize_session(app_id: str, ctx: Context) -> dict:
-    """
-    Initialize MCP session with app_id.
-
-    Args:
-        app_id: Application identifier
-
-    Returns:
-        Initialization result with success status
-    """
-    from .tools import initialize_session_tool
-
-    session_ctx = get_session_context(ctx)
-    result = await initialize_session_tool(session_ctx, session_service, app_id)
-    return result.model_dump()
+    """Get or create session context from FastMCP context with auto-initialization"""
+    try:
+        return ctx.request_context.session["session_context"]
+    except (KeyError, TypeError):
+        # Auto-initialize session with configured app_id
+        session_ctx = SessionContext(
+            app_id=settings.server.app_id,
+            initialized=True
+        )
+        ctx.request_context.session["session_context"] = session_ctx
+        return session_ctx
 
 
 @mcp.tool()
