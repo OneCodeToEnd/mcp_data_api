@@ -8,6 +8,8 @@ from .data_access import MockDataProvider
 from .cache import MemoryCache
 from .services import CategoryService, APIService, ExecutionService
 from .models import ExecutionRequest
+from fastmcp.server.middleware import Middleware, MiddlewareContext
+from fastmcp.server.dependencies import get_http_request
 
 # Initialize settings
 settings = Settings.from_yaml()
@@ -22,6 +24,32 @@ logger = logging.getLogger("mcp_data_api")
 
 # Create FastMCP instance
 mcp = FastMCP("API Data Server")
+
+class AppIdMiddleware(Middleware):
+    async def on_request(self, context: MiddlewareContext, call_next):
+        if context.fastmcp_context:
+            logger.info(f"prepare find AppId")
+            try:
+                request = get_http_request()
+                if request:
+                    # 支持多种参数名
+                    app_id = (
+                            request.query_params.get("app_id") or
+                            request.query_params.get("app-id") or
+                            request.query_params.get("key")
+                    )
+                    if app_id:
+                        context.fastmcp_context.set_state("app_id", app_id)
+                        logger.info(f"find app_id is {app_id}")
+            except Exception as e:
+                logger.error(f"Could not extract app_id: {e}")
+
+        return await call_next(context)
+
+
+mcp.add_middleware(AppIdMiddleware())
+
+
 logger.info("=" * 80)
 logger.info("MCP Data API Server Initializing")
 logger.info("=" * 80)
@@ -46,12 +74,30 @@ logger.info("All services initialized successfully")
 
 def get_app_id_from_request() -> str:
     """
-    Extract app_id from HTTP request headers using get_http_headers().
+    Extract app_id from HTTP request with priority order:
+    1. URL query parameters (?app-id=xxx or ?app_id=xxx)
+    2. HTTP headers (X-App-Id, App-Id)
+    3. Fallback to config default
 
-    Supports headers:
-    - X-App-Id (case-insensitive)
-    - App-Id (case-insensitive)
+    Supports:
+    - Query params: app-id, app_id
+    - Headers: X-App-Id, App-Id (case-insensitive)
     """
+    # Try query parameters first
+    try:
+        from fastmcp.server.dependencies import get_http_request
+
+        request = get_http_request()
+        if request and hasattr(request, 'query_params'):
+            query_params = request.query_params
+            app_id = query_params.get("app-id") or query_params.get("app_id")
+            if app_id:
+                logger.info(f"✓ app_id from URL query parameter: {app_id}")
+                return app_id
+    except Exception as e:
+        logger.error(f"Could not extract app_id from query params: {e}")
+
+    # Try headers second
     try:
         from fastmcp.server.dependencies import get_http_headers
 
@@ -68,7 +114,7 @@ def get_app_id_from_request() -> str:
                 logger.info(f"✓ app_id from HTTP header: {app_id}")
                 return app_id
     except Exception as e:
-        logger.debug(f"Could not extract app_id from headers: {e}")
+        logger.error(f"Could not extract app_id from headers: {e}")
 
     # Fallback to configured default
     logger.info(f"Using default app_id from config: {settings.server.app_id}")
@@ -91,8 +137,19 @@ async def get_categories(ctx: Context) -> dict:
 
     from .tools import get_categories_tool
 
-    # Get app_id from HTTP header
-    app_id = get_app_id_from_request()
+    # Try to get app_id from context first (set by middleware)
+    app_id = None
+    try:
+        app_id = ctx.get_state('app_id')
+        if app_id:
+            logger.info(f"✓ app_id from context state: {app_id}")
+    except Exception as e:
+        logger.error(f"Could not extract app_id from context: {e}")
+
+    # Fallback to extracting from HTTP request if not in context
+    if not app_id:
+        logger.info("app_id not found in context, falling back to request extraction")
+        app_id = get_app_id_from_request()
 
     logger.info("Executing tool logic...")
     result = await get_categories_tool(app_id, category_service)
@@ -125,8 +182,19 @@ async def get_apis_by_category(category_id: str, ctx: Context) -> dict:
 
     from .tools import get_apis_by_category_tool
 
-    # Get app_id from HTTP header
-    app_id = get_app_id_from_request()
+    # Try to get app_id from context first (set by middleware)
+    app_id = None
+    try:
+        app_id = ctx.get_state('app_id')
+        if app_id:
+            logger.info(f"✓ app_id from context state: {app_id}")
+    except Exception as e:
+        logger.error(f"Could not extract app_id from context: {e}")
+
+    # Fallback to extracting from HTTP request if not in context
+    if not app_id:
+        logger.info("app_id not found in context, falling back to request extraction")
+        app_id = get_app_id_from_request()
 
     logger.info("Executing tool logic...")
     result = await get_apis_by_category_tool(app_id, api_service, category_id)
@@ -159,8 +227,19 @@ async def get_api_details(api_names: List[str], ctx: Context) -> dict:
 
     from .tools import get_api_details_tool
 
-    # Get app_id from HTTP header
-    app_id = get_app_id_from_request()
+    # Try to get app_id from context first (set by middleware)
+    app_id = None
+    try:
+        app_id = ctx.get_state('app_id')
+        if app_id:
+            logger.info(f"✓ app_id from context state: {app_id}")
+    except Exception as e:
+        logger.error(f"Could not extract app_id from context: {e}")
+
+    # Fallback to extracting from HTTP request if not in context
+    if not app_id:
+        logger.info("app_id not found in context, falling back to request extraction")
+        app_id = get_app_id_from_request()
 
     logger.info("Executing tool logic...")
     result = await get_api_details_tool(app_id, api_service, api_names)
@@ -197,8 +276,19 @@ async def execute_apis(executions: List[dict], ctx: Context) -> dict:
 
     from .tools import execute_apis_tool
 
-    # Get app_id from HTTP header
-    app_id = get_app_id_from_request()
+    # Try to get app_id from context first (set by middleware)
+    app_id = None
+    try:
+        app_id = ctx.get_state('app_id')
+        if app_id:
+            logger.info(f"✓ app_id from context state: {app_id}")
+    except Exception as e:
+        logger.error(f"Could not extract app_id from context: {e}")
+
+    # Fallback to extracting from HTTP request if not in context
+    if not app_id:
+        logger.info("app_id not found in context, falling back to request extraction")
+        app_id = get_app_id_from_request()
 
     # Convert dict to ExecutionRequest objects
     logger.info("Converting execution requests to ExecutionRequest objects...")
@@ -237,5 +327,5 @@ if __name__ == "__main__":
         transport="sse",
         host=settings.server.host,
         port=settings.server.port,
-        path=settings.server.mcp_path
+        path="/data/api/mcp"
     )
