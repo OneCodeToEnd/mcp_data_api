@@ -1,7 +1,7 @@
 """API execution service"""
 import asyncio
 from typing import List
-from ..models import ExecutionRequest, ExecutionResult, SessionContext
+from ..models import ExecutionRequest, ExecutionResult
 from ..data_access import DataProvider
 
 
@@ -18,13 +18,13 @@ class ExecutionService:
         self._data_provider = data_provider
 
     async def execute_apis(
-        self, context: SessionContext, executions: List[ExecutionRequest]
+        self, app_id: str, executions: List[ExecutionRequest]
     ) -> List[ExecutionResult]:
         """
         Execute multiple APIs concurrently
 
         Args:
-            context: Session context
+            app_id: Application identifier
             executions: List of execution requests
 
         Returns:
@@ -32,7 +32,7 @@ class ExecutionService:
         """
         # Execute all APIs concurrently
         tasks = [
-            self._execute_single(context, execution)
+            self._execute_single(app_id, execution)
             for execution in executions
         ]
 
@@ -53,20 +53,20 @@ class ExecutionService:
         return final_results
 
     async def _execute_single(
-        self, context: SessionContext, execution: ExecutionRequest
+        self, app_id: str, execution: ExecutionRequest
     ) -> ExecutionResult:
         """
         Execute a single API
 
         Args:
-            context: Session context
+            app_id: Application identifier
             execution: Execution request
 
         Returns:
             Execution result
         """
         try:
-            return await self._data_provider.execute_api(context.app_id, execution)
+            return await self._data_provider.execute_api(app_id, execution)
         except Exception as e:
             return ExecutionResult(
                 api_name=execution.api_name,

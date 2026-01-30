@@ -1,12 +1,11 @@
 """API execution tool"""
 from typing import List
-from ..models import SessionContext, ExecutionRequest, ExecutionResponse
-from ..services import SessionService, ExecutionService
+from ..models import ExecutionRequest, ExecutionResponse
+from ..services import ExecutionService
 
 
 async def execute_apis_tool(
-    session_ctx: SessionContext,
-    session_service: SessionService,
+    app_id: str,
     execution_service: ExecutionService,
     executions: List[ExecutionRequest]
 ) -> ExecutionResponse:
@@ -14,16 +13,13 @@ async def execute_apis_tool(
     Execute multiple API calls
 
     Args:
-        session_ctx: Session context
-        session_service: Session service instance
+        app_id: Application identifier
         execution_service: Execution service instance
         executions: List of API execution requests
 
     Returns:
         Execution results for all APIs
     """
-    session_service.validate_session(session_ctx)
-
-    results = await execution_service.execute_apis(session_ctx, executions)
+    results = await execution_service.execute_apis(app_id, executions)
 
     return ExecutionResponse(results=results)

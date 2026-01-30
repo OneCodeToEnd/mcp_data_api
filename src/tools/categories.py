@@ -1,28 +1,24 @@
 """Categories tool"""
-from ..models import SessionContext, CategoriesResponse
-from ..services import SessionService, CategoryService
+from ..models import CategoriesResponse
+from ..services import CategoryService
 
 
 async def get_categories_tool(
-    session_ctx: SessionContext,
-    session_service: SessionService,
+    app_id: str,
     category_service: CategoryService
 ) -> CategoriesResponse:
     """
     Get all API categories for the current session
 
     Args:
-        session_ctx: Session context
-        session_service: Session service instance
+        app_id: Application identifier
         category_service: Category service instance
 
     Returns:
         List of categories
     """
-    # Validate session
-    session_service.validate_session(session_ctx)
 
     # Get categories
-    categories = await category_service.get_categories(session_ctx)
+    categories = await category_service.get_categories(app_id)
 
     return CategoriesResponse(categories=categories)

@@ -1,6 +1,6 @@
 """Category management service"""
 from typing import List
-from ..models import Category, SessionContext
+from ..models import Category
 from ..data_access import DataProvider
 from ..cache import CacheProvider
 
@@ -19,17 +19,17 @@ class CategoryService:
         self._data_provider = data_provider
         self._cache = cache
 
-    async def get_categories(self, context: SessionContext) -> List[Category]:
+    async def get_categories(self, app_id: str) -> List[Category]:
         """
         Get categories with caching
 
         Args:
-            context: Session context
+            app_id: Application identifier
 
         Returns:
             List of categories
         """
-        cache_key = f"categories:{context.app_id}"
+        cache_key = f"categories:{app_id}"
 
         # Try cache first
         cached = await self._cache.get(cache_key)
@@ -37,7 +37,7 @@ class CategoryService:
             return cached
 
         # Fetch from data provider
-        categories = await self._data_provider.get_categories(context.app_id)
+        categories = await self._data_provider.get_categories(app_id)
 
         # Cache the result
         await self._cache.set(cache_key, categories)
