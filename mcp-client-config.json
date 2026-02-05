@@ -2,9 +2,9 @@
   "mcpServers": {
     "api-data-server": {
       "url": "http://127.0.0.1:32001/data/api/mcp",
-      "transport": "sse",
-      "env": {
-        "SERVER_APP_ID": "test_app"
+      "header": {
+        "appId": "984",
+        "dbName": "hc_data_center"
       }
     }
   }

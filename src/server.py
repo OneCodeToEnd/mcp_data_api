@@ -83,10 +83,8 @@ def get_app_id_from_request() -> str:
         if headers:
             # Try common header names for app_id
             app_id = (
-                headers.get("x-app-id") or
-                headers.get("X-App-Id") or
-                headers.get("app-id") or
-                headers.get("App-Id")
+                headers.get("app_id") or
+                headers.get("APP_ID")
             )
             if app_id:
                 logger.info(f"✓ app_id from HTTP header: {app_id}")
@@ -151,12 +149,6 @@ async def get_categories(ctx: Context) -> dict:
 
     # Try to get app_id from context first (set by middleware)
     app_id = None
-    try:
-        app_id = ctx.get_state('app_id')
-        if app_id:
-            logger.info(f"✓ app_id from context state: {app_id}")
-    except Exception as e:
-        logger.error(f"Could not extract app_id from context: {e}")
 
     # Fallback to extracting from HTTP request if not in context
     if not app_id:
@@ -196,12 +188,6 @@ async def get_apis_by_category(category_id: str, ctx: Context) -> dict:
 
     # Try to get app_id from context first (set by middleware)
     app_id = None
-    try:
-        app_id = ctx.get_state('app_id')
-        if app_id:
-            logger.info(f"✓ app_id from context state: {app_id}")
-    except Exception as e:
-        logger.error(f"Could not extract app_id from context: {e}")
 
     # Fallback to extracting from HTTP request if not in context
     if not app_id:
@@ -241,12 +227,6 @@ async def get_api_details(api_names: List[str], ctx: Context) -> dict:
 
     # Try to get app_id from context first (set by middleware)
     app_id = None
-    try:
-        app_id = ctx.get_state('app_id')
-        if app_id:
-            logger.info(f"✓ app_id from context state: {app_id}")
-    except Exception as e:
-        logger.error(f"Could not extract app_id from context: {e}")
 
     # Fallback to extracting from HTTP request if not in context
     if not app_id:
@@ -290,12 +270,6 @@ async def execute_apis(executions: List[dict], ctx: Context) -> dict:
 
     # Try to get app_id from context first (set by middleware)
     app_id = None
-    try:
-        app_id = ctx.get_state('app_id')
-        if app_id:
-            logger.info(f"✓ app_id from context state: {app_id}")
-    except Exception as e:
-        logger.error(f"Could not extract app_id from context: {e}")
 
     # Fallback to extracting from HTTP request if not in context
     if not app_id:
