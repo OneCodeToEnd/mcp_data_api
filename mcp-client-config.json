@@ -1,5 +1,6 @@
 {
   "mcpServers": {
+
     "api-data-server": {
       "url": "http://127.0.0.1:32001/data/api/mcp",
       "header": {
@@ -7,5 +8,6 @@
         "dbName": "hc_data_center"
       }
     }
+
   }
 }
