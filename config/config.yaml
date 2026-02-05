@@ -9,8 +9,13 @@ cache:
   type: "memory"
 
 backend:
-  base_url: "https://api.example.com"
-  api_key: ""  # Set via environment variable API_KEY
+#  chatgpt_service_url: "http://chatgpt-api-service:31001"
+#  chatdb_service_url: "http://chatdb-visual-service:31001"
+#  workflow_service_url: "http://llm-workflow-service:31001"
+  chatgpt_service_url: "http://chatgpt-api-service:31001"
+  chatdb_service_url: "http://chatdb-visual-service:31001"
+  workflow_service_url: "http://llm-workflow-service:31001"
+
   timeout: 30
 
 logging:

@@ -1,15 +1,13 @@
 """FastMCP Server Entry Point"""
 from fastmcp import FastMCP, Context
-from typing import List
+from typing import List, Optional
 import logging
 import json
 from .config import Settings
-from .data_access import MockDataProvider
+from .data_access import APIDataProvider
 from .cache import MemoryCache
-from .services import CategoryService, APIService, ExecutionService
+from .services import CategoryService, APIService, ExecutionService, SQLService
 from .models import ExecutionRequest
-from fastmcp.server.middleware import Middleware, MiddlewareContext
-from fastmcp.server.dependencies import get_http_request
 
 # Initialize settings
 settings = Settings.from_yaml()
@@ -23,40 +21,18 @@ logging.basicConfig(
 logger = logging.getLogger("mcp_data_api")
 
 # Create FastMCP instance
-mcp = FastMCP("API Data Server")
-
-class AppIdMiddleware(Middleware):
-    async def on_request(self, context: MiddlewareContext, call_next):
-        if context.fastmcp_context:
-            logger.info(f"prepare find AppId")
-            try:
-                request = get_http_request()
-                if request:
-                    # 支持多种参数名
-                    app_id = (
-                            request.query_params.get("app_id") or
-                            request.query_params.get("app-id") or
-                            request.query_params.get("key")
-                    )
-                    if app_id:
-                        context.fastmcp_context.set_state("app_id", app_id)
-                        logger.info(f"find app_id is {app_id}")
-            except Exception as e:
-                logger.error(f"Could not extract app_id: {e}")
-
-        return await call_next(context)
-
-
-mcp.add_middleware(AppIdMiddleware())
-
+mcp = FastMCP(name = "API Data Server",instructions="""
+工具调用参数约束:
+1. 调用get_api_details工具入参api_names必须是get_apis_by_category工具返回的name参数
+""")
 
 logger.info("=" * 80)
 logger.info("MCP Data API Server Initializing")
 logger.info("=" * 80)
 
 # Create dependencies
-logger.info("Creating data provider: MockDataProvider")
-data_provider = MockDataProvider()
+logger.info("Creating data provider: APIDataProvider")
+data_provider = APIDataProvider(settings)
 
 logger.info(f"Creating cache: MemoryCache (TTL={settings.cache.ttl}s)")
 cache = MemoryCache(default_ttl=settings.cache.ttl)
@@ -69,6 +45,8 @@ logger.info("  - APIService")
 api_service = APIService(data_provider, cache)
 logger.info("  - ExecutionService")
 execution_service = ExecutionService(data_provider)
+logger.info("  - SQLService")
+sql_service = SQLService(data_provider)
 logger.info("All services initialized successfully")
 
 
@@ -90,7 +68,7 @@ def get_app_id_from_request() -> str:
         request = get_http_request()
         if request and hasattr(request, 'query_params'):
             query_params = request.query_params
-            app_id = query_params.get("app-id") or query_params.get("app_id")
+            app_id = query_params.get("appId") or query_params.get("app_id")
             if app_id:
                 logger.info(f"✓ app_id from URL query parameter: {app_id}")
                 return app_id
@@ -119,6 +97,40 @@ def get_app_id_from_request() -> str:
     # Fallback to configured default
     logger.info(f"Using default app_id from config: {settings.server.app_id}")
     return settings.server.app_id
+
+
+def get_db_name_from_request() -> Optional[str]:
+    """
+    Extract dbName from HTTP request headers
+
+    Supports:
+    - Headers: X-DB-Name, DB-Name, dbName (case-insensitive)
+
+    Returns:
+        Database name or None if not found
+    """
+    # Try headers
+    try:
+        from fastmcp.server.dependencies import get_http_headers
+
+        headers = get_http_headers()
+        if headers:
+            db_name = (
+                headers.get("x-db-name") or
+                headers.get("X-DB-Name") or
+                headers.get("db-name") or
+                headers.get("DB-Name") or
+                headers.get("dbname") or
+                headers.get("dbName")
+            )
+            if db_name:
+                logger.info(f"✓ dbName from HTTP header: {db_name}")
+                return db_name
+    except Exception as e:
+        logger.error(f"Could not extract dbName from headers: {e}")
+
+    logger.warning("dbName not found in request")
+    return None
 
 
 @mcp.tool()
@@ -213,7 +225,7 @@ async def get_api_details(api_names: List[str], ctx: Context) -> dict:
     Get detailed information for specific APIs.
 
     Args:
-        api_names: List of API names to get details for
+        api_names: List of API names to get details (请注意使用get_apis_by_category工具中的 name 字段中的值，而不是description字段)
 
     Returns:
         Detailed API information including parameters
@@ -308,6 +320,110 @@ async def execute_apis(executions: List[dict], ctx: Context) -> dict:
             logger.warning(f"        Error: {res.error}")
         else:
             logger.debug(f"        Response: {json.dumps(res.data, indent=10)}")
+    logger.info("=" * 80)
+
+    return result.model_dump()
+
+
+@mcp.tool()
+async def get_sql_tables(ctx: Context) -> dict:
+    """
+    Get list of all tables in the database with their comments.
+
+    Returns:
+        List of tables with names and comments
+    """
+    logger.info("=" * 80)
+    logger.info("MCP TOOL CALL: get_sql_tables")
+    logger.info("=" * 80)
+
+    from .tools import get_sql_tables_tool
+
+    app_id = ctx.get_state('app_id') or get_app_id_from_request()
+    db_name = get_db_name_from_request()
+
+    logger.info(f"✓ app_id: {app_id}")
+    if db_name:
+        logger.info(f"✓ dbName: {db_name}")
+    else:
+        logger.warning("✗ dbName not found")
+
+    result = await get_sql_tables_tool(app_id, sql_service, db_name)
+
+    logger.info(f"✓ Found {len(result.tables)} tables")
+    logger.info("=" * 80)
+
+    return result.model_dump()
+
+
+@mcp.tool()
+async def get_sql_table_fields(table_names: List[str], ctx: Context) -> dict:
+    """
+    Get detailed field information for specified tables.
+
+    Args:
+        table_names: List of table names to get field information for
+
+    Returns:
+        Field information for each table
+    """
+    logger.info("=" * 80)
+    logger.info("MCP TOOL CALL: get_sql_table_fields")
+    logger.info("=" * 80)
+    logger.info(f"Parameters: table_names={table_names}")
+
+    from .tools import get_sql_table_fields_tool
+
+    app_id = ctx.get_state('app_id') or get_app_id_from_request()
+    db_name = get_db_name_from_request()
+
+    logger.info(f"✓ app_id: {app_id}")
+    if db_name:
+        logger.info(f"✓ dbName: {db_name}")
+    else:
+        logger.warning("✗ dbName not found")
+
+    result = await get_sql_table_fields_tool(app_id, sql_service, db_name, table_names)
+
+    logger.info(f"✓ Retrieved fields for {len(result.table_fields)} tables")
+    logger.info("=" * 80)
+
+    return result.model_dump()
+
+
+@mcp.tool()
+async def execute_sql(sql: str, ctx: Context) -> dict:
+    """
+    Execute an arbitrary SQL query against the database.
+
+    Args:
+        sql: SQL query to execute
+
+    Returns:
+        Query results with data and schema information
+    """
+    logger.info("=" * 80)
+    logger.info("MCP TOOL CALL: execute_sql")
+    logger.info("=" * 80)
+    logger.info(f"SQL: {sql[:100]}..." if len(sql) > 100 else f"SQL: {sql}")
+
+    from .tools import execute_sql_tool
+
+    app_id = ctx.get_state('app_id') or get_app_id_from_request()
+    db_name = get_db_name_from_request()
+
+    logger.info(f"✓ app_id: {app_id}")
+    if db_name:
+        logger.info(f"✓ dbName: {db_name}")
+    else:
+        logger.warning("✗ dbName not found")
+
+    result = await execute_sql_tool(app_id, sql_service, db_name, sql)
+
+    if result.result.success:
+        logger.info(f"✓ Success - {len(result.result.data or [])} rows")
+    else:
+        logger.warning(f"✗ Failed - {result.result.error}")
     logger.info("=" * 80)
 
     return result.model_dump()

@@ -1,8 +1,9 @@
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 from .category import Category
 from .api import APIBasic, APIDetail
 from .execution import ExecutionResult
+from .sql import TableInfo, TableFieldsInfo, SQLExecutionResult
 
 
 class InitializeResponse(BaseModel):
@@ -30,3 +31,19 @@ class APIDetailsResponse(BaseModel):
 class ExecutionResponse(BaseModel):
     """Response for execute_apis tool"""
     results: List[ExecutionResult]
+
+
+class TablesResponse(BaseModel):
+    """Response for get_sql_tables tool"""
+    tables: List[TableInfo]
+    database_name: Optional[str] = None
+
+
+class TableFieldsResponse(BaseModel):
+    """Response for get_sql_table_fields tool"""
+    table_fields: List[TableFieldsInfo]
+
+
+class SQLExecutionResponse(BaseModel):
+    """Response for execute_sql tool"""
+    result: SQLExecutionResult

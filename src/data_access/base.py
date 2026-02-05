@@ -80,3 +80,18 @@ class DataProvider(ABC):
             Execution result
         """
         pass
+
+    @abstractmethod
+    async def execute_sql(self, app_id: str, sql: str, source_name: str) -> dict:
+        """
+        Execute SQL query
+
+        Args:
+            app_id: Application identifier
+            sql: SQL query to execute
+            source_name: Database name (from dbName header)
+
+        Returns:
+            Raw backend response
+        """
+        pass

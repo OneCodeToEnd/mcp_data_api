@@ -29,9 +29,10 @@ class CacheSettings(BaseSettings):
 
 class BackendSettings(BaseSettings):
     """Backend API configuration"""
-    base_url: str = "https://api.example.com"
-    api_key: str = ""
-    timeout: int = 30
+    chatgpt_service_url: str = "http://chatgpt-api-service:31001"
+    chatdb_service_url: str = "http://chatdb-visual-service:31001"
+    workflow_service_url: str = "http://llm-workflow-service:31001"
+    timeout: int = 60
 
     model_config = SettingsConfigDict(env_prefix="BACKEND_")
 

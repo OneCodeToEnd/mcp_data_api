@@ -14,7 +14,6 @@ class Parameter(BaseModel):
 class APIBasic(BaseModel):
     """Basic API information (name and description only)"""
     name: str
-    description: str
     category_id: str
 
 
